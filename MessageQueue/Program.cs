@@ -1,5 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
+
 using System.Threading;
 
 namespace MessageQueue
@@ -8,208 +8,90 @@ namespace MessageQueue
     {
         static void Main(string[] args)
         {
-            MessageQueue<string> messageQueue = new MessageQueue<string>();
-            messageQueue.RegisterHandler("dhisakdjask1", Print, false);
-            MessageQueue<string>.Message<string> status1 = messageQueue.Engueue("dhisakdjask1");
-            MessageQueue<string>.Message<string> status2 = messageQueue.Engueue("dhisakdjask2");
-            MessageQueue<string>.Message<string> status3 = messageQueue.Engueue("dhisakdjask3");
+            MessageQueue<IPrint> messageQueue = new MessageQueue<IPrint>();
+            messageQueue.RegisterHandler<Print1>(Print, false);
+            //messageQueue.RegisterHandler<Print2>(Print, true); // true не выставляется, тк ранее Print был выставлен как false
+            messageQueue.RegisterHandler<Print2>(Print2, true); 
+            Print1 print1 = new Print1("message 1");
+            Print2 print2_0 = new Print2("message 2_0");
+            Print2 print2_1 = new Print2("message 2_1");
+
+
+            Message<IPrint> status1 = messageQueue.Engueue(print1);
+            Message<IPrint> status2 = messageQueue.Engueue(print1);
+            Message<IPrint> status3 = messageQueue.Engueue(print1);
+            Message<IPrint> status4 = messageQueue.Engueue(print2_0);
+            Message<IPrint> status5 = messageQueue.Engueue(print2_0);
+            Message<IPrint> status6 = messageQueue.Engueue(print2_1);
+
             status1.Wait();
+            Console.WriteLine("step");
             status2.Wait();
+            Console.WriteLine("step");
             status3.Wait();
+            Console.WriteLine("step");
+            status4.Wait();
+            Console.WriteLine("step");
+            status5.Wait();
+            Console.WriteLine("step");
+            status6.Wait();
+            Console.WriteLine("step");
         }
         
-        static void Print(string str)
+        static void Print(IPrint pr)
         {
-            Thread.Sleep(3000);
-            Console.WriteLine(str);
+            pr.Print(pr.GetMessage());
             
+        }
+        static void Print2(IPrint pr)
+        {
+            pr.Print(pr.GetMessage());
+
+        }
+
+    }
+
+   interface IPrint
+    {
+        void Print(string mes);
+        string GetMessage();
+    }
+
+    class Print1 : IPrint
+    {
+        string str;
+        public Print1(string str)
+        {
+            this.str = str;
+        }
+        public void Print(string mes)
+        {
+            Thread.Sleep(1000);
+            Console.WriteLine(" Print1 {0}", mes);
+            
+        }
+        public string GetMessage()
+        {
+            return str;
         }
     }
 
-    class MessageQueue<T>
+    class Print2 : IPrint
     {
-        Dictionary<Type, Handler> handlers;
-        Dictionary<Handler, Queue<Message<T>>> queues;
-        Dictionary<Action<T>, Handler> allHandler;
-
-        public MessageQueue()
+        string str;
+        public Print2(string str)
         {
-            handlers = new Dictionary<Type, Handler>();
-            queues = new Dictionary<Handler, Queue<Message<T>>>();
-            allHandler = new Dictionary<Action<T>, Handler>();
+            this.str = str;
         }
-
-        public Message<T> Engueue(T message)
+        public void Print(string mes)
         {
-            Type typeMessage = message.GetType();
-
-            if (!handlers.ContainsKey(typeMessage))
-            {
-                throw new NotRegisterMessage();
-            }
-            else
-            {
-                Message<T> mes = new Message<T>(message);
-                lock (queues[handlers[typeMessage]])
-                {
-                    queues[handlers[typeMessage]].Enqueue(mes);
-
-                    if (handlers[typeMessage].Reentrant)
-                    {
-                        handlers[typeMessage].AsyncHandle(queues[handlers[typeMessage]].Dequeue());
-                    }
-                    else
-                    {
-                        if (!handlers[typeMessage].Working)
-                        {
-                            handlers[typeMessage].AsyncHandle(queues[handlers[typeMessage]].Dequeue());
-
-                        }
-                    }
-                }
-                return mes;
-            }
+            Console.WriteLine(" Print2 {0} start", mes);
+            Thread.Sleep(5000);
+            Console.WriteLine(" Print2 {0} finish", mes);
         }
-
-        public void RegisterHandler (List<T> messages, Action<T> handler, bool reentrant = false)
+        public string GetMessage()
         {
-            messages.ForEach(delegate (T message) {
-                RegisterHandler(message, handler);
-            });
-        }
-
-        public void RegisterHandler (T message, Action<T> handler, bool reentrant = false)
-        {
-            Type typeMessage = message.GetType();
-            
-            if ( ! allHandler.ContainsKey(handler) )
-            {
-                Queue<Message<T>> newQueue = new Queue<Message<T>>();
-                Handler newHandler = new Handler(handler, newQueue, reentrant);
-                handlers.Add(typeMessage, newHandler);
-                queues.Add(newHandler, newQueue);
-                allHandler.Add(handler, newHandler);
-            } 
-            else
-            {
-                handlers.Add(typeMessage, allHandler[handler]);
-            }
-        }
-
-        public class Message<M>
-        {
-            public M message { get; }
-            private IAsyncResult resultObj;
-            private Exception exception;
-
-            internal Message(M message)
-            {
-                this.message = message;
-                resultObj = null;
-                exception = null; 
-            }
-
-            internal void setException(Exception exception)
-            {
-                this.exception = exception;
-            }
-
-            internal void setResultObj(IAsyncResult resultObj)
-            {
-                this.resultObj = resultObj;
-            }
-
-            public bool Start()
-            {
-                return resultObj != null;
-            }
-
-            public void Wait()
-            {
-                if (resultObj == null)
-                {
-                    lock (this)
-                    {
-                        while (resultObj == null)
-                        {
-                            Monitor.Wait(this);
-                        }
-                    }
-                }
-                resultObj.AsyncWaitHandle.WaitOne();
-            }
-
-            public Exception Exception()
-            {
-                return exception;
-            }
-        }
-
-        internal class Handler
-        {
-            private Action<T> handler;
-            private Queue<Message<T>> queue;
-            private bool reentrant;
-            private bool working;
-
-            internal bool Working { get { return working; } }
-
-            internal bool Reentrant { get { return reentrant; } }
-
-            internal Handler(Action<T> handler, Queue<Message<T>> queue, bool reentrant)
-            {
-                this.handler = handler;
-                this.queue = queue;
-                this.reentrant = reentrant;
-                this.working = false;
-            }
-
-            internal void AsyncHandle(Message<T> message)
-            {
-                working = true;
-                Action<Message<T>> asyncHandler = delegate (Message<T> mes) {
-                    try
-                    {
-                        handler.Invoke(mes.message);
-                    } catch (Exception e)
-                    {
-                        mes.setException(e);
-                    }
-                };
-                message.setResultObj(asyncHandler.BeginInvoke(message, new AsyncCallback(AsyncCompleted), null));
-                lock (message.message)
-                {
-                    Monitor.PulseAll(message.message);
-                }
-            }
-
-            private void AsyncCompleted(IAsyncResult resObj)
-            {
-                lock (queue)
-                {
-                    if(queue.Count != 0)
-                    {
-                        AsyncHandle(queue.Dequeue());
-                    }
-                    else
-                    {
-                        working = false;
-                    }
-                }
-            }
-
-            internal bool Equals(Handler obj)
-            {
-                return handler == obj.handler;
-            }
-        }
-    }
-
-    public class NotRegisterMessage: Exception
-    {
-        public NotRegisterMessage()
-        {
-
+            return str;
         }
     }
 }

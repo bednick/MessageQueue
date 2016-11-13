@@ -43,6 +43,10 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Handler.cs" />
+    <Compile Include="Message.cs" />
+    <Compile Include="MessageQueue.cs" />
+    <Compile Include="Exceptions.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
